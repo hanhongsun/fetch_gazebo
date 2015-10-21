@@ -49,7 +49,7 @@ head_joint_names = ["head_pan_joint", "head_tilt_joint"]
 head_joint_positions = [0.0, 0.0]
 
 if __name__ == "__main__":
-    rospy.init_node("prepare_simulated_robot")
+    rospy.init_node("prepare_simulated_robot_pick_place")
 
     # Check robot serial number, we never want to run this on a real robot!
     if rospy.get_param("robot/serial") != "ABCDEFGHIJKLMNOPQRSTUVWX":
