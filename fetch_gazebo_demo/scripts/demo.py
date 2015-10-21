@@ -232,13 +232,12 @@ class GraspingClient(object):
         l.pre_place_approach = self.pick_result.grasp.pre_grasp_approach
         l.post_place_retreat = self.pick_result.grasp.post_grasp_retreat
         places.append(copy.deepcopy(l))
-        # create another several places, rotate each by 90 degrees in yaw direction
-        l.place_pose.pose = rotate_pose_msg_by_euler_angles(l.place_pose.pose, 0, 0, 1.57)
-        places.append(copy.deepcopy(l))
-        l.place_pose.pose = rotate_pose_msg_by_euler_angles(l.place_pose.pose, 0, 0, 1.57)
-        places.append(copy.deepcopy(l))
-        l.place_pose.pose = rotate_pose_msg_by_euler_angles(l.place_pose.pose, 0, 0, 1.57)
-        places.append(copy.deepcopy(l))
+        # create another several places, rotate each by 360/m degrees in yaw direction
+        m = 16 # number of possible place poses
+        pi = 3.141592653589
+        for i in range(0, m-1):
+            l.place_pose.pose = rotate_pose_msg_by_euler_angles(l.place_pose.pose, 0, 0, 2 * pi / m)
+            places.append(copy.deepcopy(l))
 
         success, place_result = self.pickplace.place_with_retry(block.name,
                                                                 places,
@@ -258,6 +257,15 @@ class GraspingClient(object):
         joints = ["shoulder_pan_joint", "shoulder_lift_joint", "upperarm_roll_joint",
                   "elbow_flex_joint", "forearm_roll_joint", "wrist_flex_joint", "wrist_roll_joint"]
         pose = [1.32, 0.7, 0.0, -2.0, 0.0, -0.57, 0.0]
+        while not rospy.is_shutdown():
+            result = self.move_group.moveToJointPosition(joints, pose, 0.02)
+            if result.error_code.val == MoveItErrorCodes.SUCCESS:
+                return
+
+    def intermedia_stow(self):
+        joints = ["shoulder_pan_joint", "shoulder_lift_joint", "upperarm_roll_joint",
+                  "elbow_flex_joint", "forearm_roll_joint", "wrist_flex_joint", "wrist_roll_joint"]
+        pose = [0.7, -0.3, 0.0, -0.3, 0.0, -0.57, 0.0]
         while not rospy.is_shutdown():
             result = self.move_group.moveToJointPosition(joints, pose, 0.02)
             if result.error_code.val == MoveItErrorCodes.SUCCESS:
@@ -296,13 +304,16 @@ if __name__ == "__main__":
         head_action.look_at(1.2, 0.0, 0.0, "base_link")
 
         # Get block to pick
+        fail_ct = 0
         while not rospy.is_shutdown() and not cube_in_grapper:
             rospy.loginfo("Picking object...")
             grasping_client.updateScene()
             cube, grasps = grasping_client.getGraspableObject()
             if cube == None:
                 rospy.logwarn("Perception failed.")
+                # grasping_client.intermedia_stow()
                 grasping_client.stow()
+                head_action.look_at(1.2, 0.0, 0.0, "base_link")
                 continue
 
             # Pick the block
@@ -311,6 +322,10 @@ if __name__ == "__main__":
                 break
             rospy.logwarn("Grasping failed.")
             grasping_client.stow()
+            if fail_ct > 15:
+                fail_ct = 0
+                break
+            fail_ct += 1
 
         # Tuck the arm
         #grasping_client.tuck()
@@ -340,7 +355,14 @@ if __name__ == "__main__":
                 cube_in_grapper = False
                 break
             rospy.logwarn("Placing failed.")
+            grasping_client.intermedia_stow()
+            grasping_client.stow()
+            if fail_ct > 15:
+                fail_ct = 0
+                break
+            fail_ct += 1
         # Tuck the arm, lower the torso
+        grasping_client.intermedia_stow()
         grasping_client.stow()
         rospy.loginfo("Finished")
         #torso_action.move_to([0.0, ])
